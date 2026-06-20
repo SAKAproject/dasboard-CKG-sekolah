@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// TENANT (MULTI PUSKESMAS)
+// ============================================
+model Tenant {
+  id            String   @id @default(uuid())
+  kodeTenant    String   @unique @map("kode_tenant")
+  namaPuskesmas String   @map("nama_puskesmas")
+  alamat        String?
+  kecamatan     String?
+  kabupaten     String?
+  provinsi      String?
+  telepon       String?
+  email         String?
+  logoUrl       String?  @map("logo_url")
+  statusAktif   Boolean  @default(true) @map("status_aktif")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  users               User[]
+  roles               Role[]
+  schools             School[]
+  classes             Class[]
+  students            Student[]
+  kecamatans          Kecamatan[]
+  desas               Desa[]
+  screeningCategories ScreeningCategory[]
+  screeningQuestions  ScreeningQuestion[]
+  screeningAnswers    ScreeningAnswer[]
+  formSubmissions     FormSubmission[]
+  entryLogs           EntryLog[]
+  auditLogs           AuditLog[]
+  systemMenus         SystemMenu[]
+  systemSettings      SystemSetting[]
+  customFields        CustomField[]
+  customFieldValues   CustomFieldValue[]
+  subscription        Subscription?
+
+  @@map("tenants")
+}
+
+// ============================================
+// ROLE & PERMISSION
+// ============================================
+model Role {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  namaRole  String   @map("nama_role")
+  kodeRole  String   @map("kode_role") // admin, petugas_entri, guru, siswa
+  deskripsi String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id             String   @id @default(uuid())
+  kodePermission String   @unique @map("kode_permission")
+  namaPermission String   @map("nama_permission")
+  modul          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid())
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================
+// USER
+// ============================================
+model User {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  roleId      String?   @map("role_id")
+  supabaseUid String?   @unique @map("supabase_uid")
+  namaLengkap String    @map("nama_lengkap")
+  email       String    @unique
+  telepon     String?
+  schoolId    String?   @map("school_id")
+  statusAktif Boolean   @default(true) @map("status_aktif")
+  lastLogin   DateTime? @map("last_login")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role?      @relation(fields: [roleId], references: [id])
+  school    School?    @relation(fields: [schoolId], references: [id])
+  entryLogs EntryLog[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+// ============================================
+// MASTER WILAYAH
+// ============================================
+model Kecamatan {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  namaKecamatan String   @map("nama_kecamatan")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  desas  Desa[]
+
+  @@map("kecamatans")
+}
+
+model Desa {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  kecamatanId String?  @map("kecamatan_id")
+  namaDesa    String   @map("nama_desa")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kecamatan Kecamatan? @relation(fields: [kecamatanId], references: [id])
+  schools   School[]
+
+  @@map("desas")
+}
+
+// ============================================
+// SEKOLAH & KELAS
+// ============================================
+model School {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  desaId            String?  @map("desa_id")
+  namaSekolah       String   @map("nama_sekolah")
+  kodeSekolah       String?  @map("kode_sekolah")
+  alamat            String?
+  tingkatPendidikan String   @default("SD") @map("tingkat_pendidikan")
+  statusAktif       Boolean  @default(true) @map("status_aktif")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  desa     Desa?     @relation(fields: [desaId], references: [id])
+  classes  Class[]
+  students Student[]
+  users    User[]
+
+  @@map("schools")
+}
+
+model Class {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  schoolId         String   @map("school_id")
+  namaKelas        String   @map("nama_kelas") // 1..6
+  klasifikasiKelas String?  @map("klasifikasi_kelas") // A, B, C
+  tahunAjaran      String?  @map("tahun_ajaran")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students Student[]
+
+  @@map("classes")
+}
+
+// ============================================
+// SISWA
+// ============================================
+model Student {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  schoolId String? @map("school_id")
+  classId  String? @map("class_id")
+
+  nik           String    @unique
+  nisn          String?
+  namaLengkap   String    @map("nama_lengkap")
+  jenisKelamin  String    @map("jenis_kelamin") // Laki-laki, Perempuan
+  tempatLahir   String?   @map("tempat_lahir")
+  tanggalLahir  DateTime? @map("tanggal_lahir") @db.Date
+  agama         String?
+  golonganDarah String?   @map("golongan_darah")
+  disabilitas   String?   @default("Tidak")
+
+  alamatLengkap     String? @map("alamat_lengkap")
+  kelurahanDomisili String? @map("kelurahan_domisili")
+  kecamatanDomisili String? @map("kecamatan_domisili")
+  kabupatenDomisili String? @map("kabupaten_domisili")
+
+  namaWali         String?   @map("nama_wali")
+  nikWali          String?   @map("nik_wali")
+  tanggalLahirWali DateTime? @map("tanggal_lahir_wali") @db.Date
+  alamatWali       String?   @map("alamat_wali")
+  nomorHp          String?   @map("nomor_hp")
+  emailSiswa       String?   @map("email_siswa")
+
+  statusAktif Boolean  @default(true) @map("status_aktif")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  school          School?            @relation(fields: [schoolId], references: [id])
+  class           Class?             @relation(fields: [classId], references: [id])
+  formSubmissions FormSubmission[]
+  customValues    CustomFieldValue[]
+
+  @@index([tenantId])
+  @@index([schoolId])
+  @@index([classId])
+  @@map("students")
+}
+
+// ============================================
+// FORM SUBMISSION CKG
+// ============================================
+model FormSubmission {
+  id                String    @id @default(uuid())
+  tenantId          String    @map("tenant_id")
+  studentId         String?   @map("student_id")
+  informedConsent   Boolean   @map("informed_consent")
+  alasanTidakSetuju String?   @map("alasan_tidak_setuju")
+  statusPengisian   String    @default("draft") @map("status_pengisian") // draft, submitted, verified
+  progressPersen    Int       @default(0) @map("progress_persen")
+  submittedAt       DateTime? @map("submitted_at")
+
+  sudahDiinputSistem Boolean   @default(false) @map("sudah_diinput_sistem")
+  diinputOleh        String?   @map("diinput_oleh")
+  diinputPada        DateTime? @map("diinput_pada")
+  catatanPetugas     String?   @map("catatan_petugas")
+
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student Student?          @relation(fields: [studentId], references: [id])
+  answers ScreeningAnswer[]
+  entryLogs EntryLog[]
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([statusPengisian])
+  @@index([sudahDiinputSistem])
+  @@map("form_submissions")
+}
+
+// ============================================
+// SKRINING DINAMIS
+// ============================================
+model ScreeningCategory {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  namaKategori String   @map("nama_kategori")
+  kodeKategori String   @map("kode_kategori")
+  deskripsi    String?
+  nomorUrut    Int      @default(0) @map("nomor_urut")
+  targetKelas  String?  @map("target_kelas")
+  aktif        Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questions ScreeningQuestion[]
+
+  @@map("screening_categories")
+}
+
+model ScreeningQuestion {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  categoryId      String   @map("category_id")
+  nomorPertanyaan Int      @map("nomor_pertanyaan")
+  teksPertanyaan  String   @map("teks_pertanyaan")
+  tipeJawaban     String   @map("tipe_jawaban") // ya_tidak, pilihan_ganda, checkbox, angka, teks, dropdown
+  opsiJawaban     Json?    @map("opsi_jawaban")
+  wajib           Boolean  @default(true)
+  skipLogic       Json?    @map("skip_logic")
+  kondisiTampil   Json?    @map("kondisi_tampil")
+  nomorUrut       Int      @default(0) @map("nomor_urut")
+  aktif           Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category ScreeningCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  answers  ScreeningAnswer[]
+
+  @@index([categoryId])
+  @@map("screening_questions")
+}
+
+model ScreeningAnswer {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  submissionId String   @map("submission_id")
+  questionId   String   @map("question_id")
+  jawaban      String?
+  jawabanArray Json?    @map("jawaban_array")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submission FormSubmission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   ScreeningQuestion @relation(fields: [questionId], references: [id])
+
+  @@index([submissionId])
+  @@map("screening_answers")
+}
+
+// ============================================
+// ENTRY LOG (PETUGAS ENTRI)
+// ============================================
+model EntryLog {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  submissionId String   @map("submission_id")
+  petugasId    String   @map("petugas_id")
+  aksi         String // set_sudah_input, set_belum_input
+  catatan      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submission FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  petugas    User           @relation(fields: [petugasId], references: [id])
+
+  @@map("entry_logs")
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String?  @map("user_id")
+  aksi      String // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, EXPORT, IMPORT
+  modul     String?
+  recordId  String?  @map("record_id")
+  dataLama  Json?    @map("data_lama")
+  dataBaru  Json?    @map("data_baru")
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ============================================
+// MENU DINAMIS
+// ============================================
+model SystemMenu {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  namaMenu   String   @map("nama_menu")
+  icon       String?
+  route      String?
+  parentId   String?  @map("parent_id")
+  nomorUrut  Int      @default(0) @map("nomor_urut")
+  aktif      Boolean  @default(true)
+  roleAccess Json?    @map("role_access")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   SystemMenu?  @relation("MenuHierarchy", fields: [parentId], references: [id])
+  children SystemMenu[] @relation("MenuHierarchy")
+
+  @@map("system_menus")
+}
+
+// ============================================
+// SETTINGS (BRANDING & KONFIGURASI)
+// ============================================
+model SystemSetting {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  kunci     String
+  nilai     String?
+  tipe      String   @default("text")
+  deskripsi String?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, kunci])
+  @@map("system_settings")
+}
+
+// ============================================
+// CUSTOM FIELD BUILDER
+// ============================================
+model CustomField {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  modul       String // student, parent, health
+  namaField   String   @map("nama_field")
+  label       String
+  tipeField   String   @map("tipe_field") // text, number, date, dropdown, checkbox
+  opsiPilihan Json?    @map("opsi_pilihan")
+  wajib       Boolean  @default(false)
+  nomorUrut   Int      @default(0) @map("nomor_urut")
+  aktif       Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  values CustomFieldValue[]
+
+  @@map("custom_fields")
+}
+
+model CustomFieldValue {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  customFieldId String   @map("custom_field_id")
+  studentId     String   @map("student_id")
+  nilai         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customField CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("custom_field_values")
+}
+
+// ============================================
+// SAAS SUBSCRIPTION
+// ============================================
+model SubscriptionPlan {
+  id            String   @id @default(uuid())
+  namaPaket     String   @map("nama_paket")
+  kodePaket     String   @unique @map("kode_paket")
+  fitur         Json?
+  maksSekolah   Int      @default(5) @map("maks_sekolah")
+  maksSiswa     Int      @default(1000) @map("maks_siswa")
+  hargaBulanan  Decimal  @default(0) @map("harga_bulanan") @db.Decimal(12, 2)
+  aktif         Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                 String    @id @default(uuid())
+  tenantId           String    @unique @map("tenant_id")
+  planId             String    @map("plan_id")
+  status             String    @default("trial") // trial, active, expired, cancelled
+  mulaiBerlangganan  DateTime? @map("mulai_berlangganan") @db.Date
+  akhirBerlangganan  DateTime? @map("akhir_berlangganan") @db.Date
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   SubscriptionPlan  @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
